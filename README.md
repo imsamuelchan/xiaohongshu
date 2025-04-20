@@ -9,12 +9,12 @@
 - 支持图片自动下载与保存
 - 提供RESTful API接口，方便集成
 - 自动处理短链接和重定向链接
-- 预置常见笔记内容，应对防爬机制
+- 支持直接解析meta标签内容提取
 
 ## 安装依赖
 
 ```bash
-pip install fastapi uvicorn requests beautifulsoup4
+pip install -r requirements.txt
 ```
 
 ## 运行服务
@@ -23,24 +23,18 @@ pip install fastapi uvicorn requests beautifulsoup4
 python xiaohongshu_api.py
 ```
 
-服务将在 [http://localhost:8000](http://localhost:8000) 启动。
+服务将在 [http://localhost:8080](http://localhost:8080) 启动。
 
 ## API文档
 
-启动服务后，访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看完整的API文档。
+启动服务后，访问 [http://localhost:8080/docs](http://localhost:8080/docs) 查看完整的API文档。
 
 ## 接口使用
-
-### GET 请求
-
-```
-GET /api/extract?share_text=小红书分享文本&save_images=true
-```
 
 ### POST 请求
 
 ```
-POST /api/extract
+POST /extract
 Content-Type: application/json
 
 {
@@ -51,32 +45,49 @@ Content-Type: application/json
 
 ### 参数说明
 
-- `share_text`: 小红书笔记分享文本或链接
+- `share_text`: 小红书笔记分享文本、链接或HTML meta标签
 - `save_images`: 是否保存图片（默认为true）
 
 ### 响应格式
 
 ```json
 {
+  "url": "笔记URL",
   "title": "笔记标题",
   "content": "笔记内容",
   "hashtags": ["#标签1", "#标签2"],
+  "interaction_info": {
+    "likes": "点赞数",
+    "comments": "评论数",
+    "collects": "收藏数"
+  },
   "images": ["图片URL1", "图片URL2"],
-  "saved_images": ["保存的图片路径1", "保存的图片路径2"],
-  "likes": "点赞数",
-  "comments": "评论数",
-  "collects": "收藏数",
-  "note_id": "笔记ID",
-  "url": "笔记URL"
+  "saved_images": ["保存的图片路径1", "保存的图片路径2"]
 }
 ```
 
 ## 使用示例
 
-### 使用测试脚本
+### 使用CURL
 
 ```bash
-python test_xiaohongshu_api.py "小红书分享文本或链接"
+curl -X POST "http://localhost:8080/extract" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "share_text": "70 依依学金融发布了一篇小红书笔记，快来看吧！ 😆 2B4fyO9nDGbkJsc 😆 http://xhslink.com/a/EPoEXanJ2mFab，复制本条信息，打开【小红书】App查看精彩内容！", 
+    "save_images": true
+  }'
+```
+
+### 直接提供meta标签
+
+```bash
+curl -X POST "http://localhost:8080/extract" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "share_text": "<meta name=\"keywords\" content=\"金融, 投资...\"><meta name=\"description\" content=\"...\">...", 
+    "save_images": true
+  }'
 ```
 
 ### Python代码示例
@@ -85,25 +96,25 @@ python test_xiaohongshu_api.py "小红书分享文本或链接"
 import requests
 
 # API地址
-api_url = "http://localhost:8000/api/extract"
+api_url = "http://localhost:8080/extract"
 
-# 发送GET请求
-params = {
+# 发送POST请求
+data = {
     "share_text": "70 依依学金融发布了一篇小红书笔记，快来看吧！ 😆 2B4fyO9nDGbkJsc 😆 http://xhslink.com/a/EPoEXanJ2mFab，复制本条信息，打开【小红书】App查看精彩内容！",
     "save_images": True
 }
 
-response = requests.get(api_url, params=params)
-data = response.json()
-print(data)
+response = requests.post(api_url, json=data)
+result = response.json()
+print(result)
 ```
 
 ## 注意事项
 
 1. 由于小红书的防爬机制，部分内容可能需要登录才能查看
 2. 图片会保存在 `xiaohongshu_images` 目录下的子文件夹中
-3. 对于已知内容的笔记，会直接返回预置的数据
-4. 服务默认使用8000端口，可以在代码中修改
+3. 当从网站无法提取内容时，可以直接提供网页中的meta标签进行解析
+4. 服务默认使用8080端口，可以在代码中修改
 
 ## 限制与免责声明
 
