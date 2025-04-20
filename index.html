@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小红书内容提取工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #ff2442;
+            text-align: center;
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #ff2442;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #e01f3d;
+        }
+        #result {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        .result-container {
+            display: none;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        .tag {
+            background-color: #f0f0f0;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        .images {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .image-container {
+            position: relative;
+        }
+        .image-container img {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .loading {
+            text-align: center;
+            display: none;
+            padding: 20px;
+        }
+        .error {
+            color: red;
+            margin-top: 15px;
+            display: none;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>小红书内容提取工具</h1>
+        <p>请输入小红书分享链接或文本：</p>
+        <textarea id="shareText" placeholder="例如：70 依依学金融发布了一篇小红书笔记，快来看吧！ 😆 2B4fyO9nDGbkJsc 😆 http://xhslink.com/a/EPoEXanJ2mFab，复制本条信息，打开【小红书】App查看精彩内容！"></textarea>
+        <div>
+            <label>
+                <input type="checkbox" id="saveImages" checked> 保存图片
+            </label>
+        </div>
+        <button id="submitBtn">提取内容</button>
+        
+        <div class="loading" id="loading">
+            正在提取内容，请稍候...
+        </div>
+        
+        <div class="error" id="error"></div>
+        
+        <div id="result">
+            <div class="result-container" id="resultContainer">
+                <h2 id="title"></h2>
+                <div class="info">
+                    <span id="url"></span>
+                    <span>👍 <span id="likes">0</span> 💬 <span id="comments">0</span> ⭐ <span id="collects">0</span></span>
+                </div>
+                <div class="tags" id="tags"></div>
+                <p id="content"></p>
+                <h3>图片：</h3>
+                <div class="images" id="images"></div>
+                
+                <h3>JSON 响应：</h3>
+                <pre id="jsonResponse"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('submitBtn').addEventListener('click', async () => {
+            const shareText = document.getElementById('shareText').value.trim();
+            const saveImages = document.getElementById('saveImages').checked;
+            
+            if (!shareText) {
+                showError('请输入小红书分享链接或文本');
+                return;
+            }
+            
+            showLoading(true);
+            hideError();
+            hideResult();
+            
+            try {
+                const response = await fetch('/extract', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        share_text: shareText,
+                        save_images: saveImages
+                    })
+                });
+                
+                const data = await response.json();
+                showLoading(false);
+                
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                
+                displayResult(data);
+            } catch (error) {
+                showLoading(false);
+                showError('提取内容失败：' + error.message);
+            }
+        });
+        
+        function displayResult(data) {
+            // 显示标题
+            document.getElementById('title').textContent = data.title || '无标题';
+            
+            // 显示URL
+            document.getElementById('url').textContent = data.url || '';
+            
+            // 显示互动数据
+            if (data.interaction_info) {
+                document.getElementById('likes').textContent = data.interaction_info.likes || '0';
+                document.getElementById('comments').textContent = data.interaction_info.comments || '0';
+                document.getElementById('collects').textContent = data.interaction_info.collects || '0';
+            }
+            
+            // 显示标签
+            const tagsContainer = document.getElementById('tags');
+            tagsContainer.innerHTML = '';
+            if (data.hashtags && data.hashtags.length > 0) {
+                data.hashtags.forEach(tag => {
+                    const tagElement = document.createElement('span');
+                    tagElement.className = 'tag';
+                    tagElement.textContent = tag;
+                    tagsContainer.appendChild(tagElement);
+                });
+            }
+            
+            // 显示内容
+            document.getElementById('content').textContent = data.content || '无内容';
+            
+            // 显示图片
+            const imagesContainer = document.getElementById('images');
+            imagesContainer.innerHTML = '';
+            if (data.images && data.images.length > 0) {
+                data.images.forEach(imageUrl => {
+                    const imgContainer = document.createElement('div');
+                    imgContainer.className = 'image-container';
+                    
+                    const img = document.createElement('img');
+                    img.src = imageUrl;
+                    img.addEventListener('click', () => window.open(imageUrl, '_blank'));
+                    
+                    imgContainer.appendChild(img);
+                    imagesContainer.appendChild(imgContainer);
+                });
+            } else {
+                imagesContainer.innerHTML = '<p>无图片</p>';
+            }
+            
+            // 显示JSON响应
+            document.getElementById('jsonResponse').textContent = JSON.stringify(data, null, 2);
+            
+            // 显示结果容器
+            document.getElementById('resultContainer').style.display = 'block';
+        }
+        
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+        
+        function showError(message) {
+            const errorElement = document.getElementById('error');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+        
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+        
+        function hideResult() {
+            document.getElementById('resultContainer').style.display = 'none';
+        }
+    </script>
+</body>
+</html> 
