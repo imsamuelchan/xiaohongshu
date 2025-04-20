@@ -4,8 +4,8 @@
 
 # 确认用户名和仓库名称
 read -p "请输入您的GitHub用户名: " USERNAME
-read -p "请输入仓库名称(默认: xiaohongshu-scraper): " REPO_NAME
-REPO_NAME=${REPO_NAME:-xiaohongshu-scraper}
+read -p "请输入仓库名称(默认: xiaohongshu): " REPO_NAME
+REPO_NAME=${REPO_NAME:-xiaohongshu}
 
 echo "将项目同步到 https://github.com/$USERNAME/$REPO_NAME"
 read -p "是否继续? (y/n): " CONFIRM
