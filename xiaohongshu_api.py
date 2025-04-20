@@ -4,12 +4,15 @@ import json
 from typing import Dict, Any, List, Optional
 import re
 import os
+import io
+import base64
 from urllib.parse import urlparse, urljoin
 import logging
 import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from pathlib import Path
@@ -25,9 +28,24 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# 图片保存目录
+# 添加CORS中间件，允许跨域请求
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许所有源
+    allow_credentials=True,
+    allow_methods=["*"],  # 允许所有方法
+    allow_headers=["*"],  # 允许所有头部
+)
+
+# 图片保存目录 - Vercel环境使用内存存储
 IMAGES_DIR = "xiaohongshu_images"
 os.makedirs(IMAGES_DIR, exist_ok=True)
+
+# 用于存储Vercel环境中的图片数据
+IMAGE_CACHE = {}
+
+# 检查是否在Vercel环境中运行
+IN_VERCEL = os.environ.get('VERCEL') == '1'
 
 # 请求模型
 class XHSShareInput(BaseModel):
@@ -163,13 +181,9 @@ def extract_xhs_url(share_text: str) -> str:
 
 def download_image(url: str, folder: str, index: int) -> str:
     """
-    下载图片并保存到指定文件夹
+    下载图片并保存到指定文件夹或内存（Vercel环境）
     """
     try:
-        # 创建文件夹（如果不存在）
-        full_folder_path = os.path.join(IMAGES_DIR, folder)
-        os.makedirs(full_folder_path, exist_ok=True)
-        
         # 构建文件名 - 使用图片URL中的标识符
         filename = f"image_{index}.jpg"  # 默认文件名
         
@@ -183,16 +197,32 @@ def download_image(url: str, folder: str, index: int) -> str:
             except:
                 pass
         
-        filepath = os.path.join(full_folder_path, filename)
-        
         logger.info(f"正在下载图片: {url}")
         # 下载图片
         response = requests.get(url, headers=get_headers(), verify=False)
+        
         if response.status_code == 200:
-            with open(filepath, 'wb') as f:
-                f.write(response.content)
-            logger.info(f"图片保存成功: {filepath}")
-            return filepath
+            # 在Vercel环境中使用内存存储
+            if IN_VERCEL:
+                # 用folder和filename作为缓存键
+                cache_key = f"{folder}/{filename}"
+                # 存储为Base64编码
+                image_data = base64.b64encode(response.content).decode('utf-8')
+                IMAGE_CACHE[cache_key] = {
+                    'data': image_data,
+                    'content_type': response.headers.get('Content-Type', 'image/jpeg')
+                }
+                logger.info(f"图片保存到内存: {cache_key}")
+                return cache_key
+            else:
+                # 在本地环境中使用文件存储
+                full_folder_path = os.path.join(IMAGES_DIR, folder)
+                os.makedirs(full_folder_path, exist_ok=True)
+                filepath = os.path.join(full_folder_path, filename)
+                with open(filepath, 'wb') as f:
+                    f.write(response.content)
+                logger.info(f"图片保存成功: {filepath}")
+                return filepath
         else:
             logger.error(f"下载图片失败，状态码: {response.status_code}")
     except Exception as e:
@@ -489,11 +519,40 @@ async def extract_xiaohongshu_content(input_data: XHSShareInput):
     else:
         return {"error": "提取内容失败"}
 
+@app.get("/images/{folder}/{filename}")
+async def get_image(folder: str, filename: str):
+    """
+    获取图片内容 - 用于Vercel环境中的图片访问
+    """
+    if IN_VERCEL:
+        cache_key = f"{folder}/{filename}"
+        image_data = IMAGE_CACHE.get(cache_key)
+        if image_data:
+            # 返回Base64编码的图片数据
+            return {
+                "image": image_data['data'],
+                "content_type": image_data['content_type']
+            }
+        return {"error": "图片不存在"}
+    else:
+        file_path = os.path.join(IMAGES_DIR, folder, filename)
+        if os.path.exists(file_path):
+            with open(file_path, 'rb') as f:
+                image_data = base64.b64encode(f.read()).decode('utf-8')
+            return {
+                "image": image_data,
+                "content_type": "image/jpeg"
+            }
+        return {"error": "图片不存在"}
+
 @app.get("/")
 async def root():
     """API根路径，返回简单的欢迎信息"""
-    return {"message": "欢迎使用小红书内容提取API，请使用 /xiaohongshu/extract 端点"}
+    return {"message": "欢迎使用小红书内容提取API，请使用 /extract 端点"}
 
-# 启动服务器
+# 导出app，用于Vercel部署
+app
+
+# 本地开发环境启动服务器
 if __name__ == "__main__":
     uvicorn.run("xiaohongshu_api:app", host="0.0.0.0", port=8080, reload=True) 
