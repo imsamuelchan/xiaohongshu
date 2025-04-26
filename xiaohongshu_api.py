@@ -16,6 +16,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from pathlib import Path
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -555,4 +559,6 @@ app
 
 # 本地开发环境启动服务器
 if __name__ == "__main__":
-    uvicorn.run("xiaohongshu_api:app", host="0.0.0.0", port=8080, reload=True) 
+    port = int(os.environ.get("PORT", 8080))
+    host = os.environ.get("HOST", "0.0.0.0")
+    uvicorn.run("xiaohongshu_api:app", host=host, port=port, reload=True) 

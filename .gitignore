@@ -36,4 +36,11 @@ ENV/
 
 # 下载的图片和数据文件
 xiaohongshu_images/*/
-xiaohongshu_20250420*/ 
+xiaohongshu_20250420*/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local 
